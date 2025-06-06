@@ -88,7 +88,7 @@ services:
       - TZ=$chromium_tz
       - CHROME_CLI=$homepage
       - DISABLE_GPU=false
-      - CHROMIUM_FLAGS=--no-sandbox --disable-dev-shm-usage --ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy --max-active-webgl-contexts=32 --max-gum-fps=60 --num-raster-threads=8
+      - CHROMIUM_FLAGS=--no-sandbox --ignore-gpu-blocklist --disable-gpu --num-raster-threads=8 --force_cpu_raster --disable-accelerated-video-decode --disable-background-networking --disable-breakpad --disable-component-update --disable-default-apps --disable-dev-shm-usage --disable-hang-monitor --disable-prompt-on-repost --disable-renderer-backgrounding --disable-sync --disable-background-timer-throttling --disable-client-side-phishing-detection --disable-domain-reliability --disable-features=TranslateUI,BackForwardCache --disable-ipc-flooding-protection --disable-notifications --disable-speech-api --metrics-recording-only --no-default-browser-check --noerrdialogs --no-first-run --autoplay-policy=no-user-gesture-required --password-store=basic --js-flags="--max-old-space-size=24576" --restore-last-session --start-maximized
     volumes:
       - ./config:/config
       - /dev/shm:/dev/shm
@@ -138,4 +138,5 @@ Management Commands:
 📁 Info saved to: /root/chromium_access.txt
 ==================================================
 EOF
+
 
