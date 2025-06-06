@@ -110,30 +110,31 @@ docker compose up -d
 echo -e "\n\033[1;32m[5/5] Getting access information...\033[0m"
 public_ip=$(curl -s https://api.ipify.org || hostname -I | awk '{print $1}')
 
-# Final instructions
-cat <<EOF
+# Final instructions (stdout + save to file)
+cat <<EOF | tee /root/chromium_access.txt
 
 ==================================================
- Chromium Remote Browser Access Instructions
+ ✅ Chromium Remote Browser Access Instructions ✅
 ==================================================
 Access URLs:
-  - http://$public_ip:3000
-  - https://$public_ip:3001 (ignore SSL warning)
+  🌐 HTTP:  http://$public_ip:3000
+  🔐 HTTPS: https://$public_ip:3001  (ignore SSL warning)
 
 Credentials:
-  Username: $chromium_user
-  Password: $chromium_pass
+  👤 Username: $chromium_user
+  🔒 Password: $chromium_pass
 
 Firewall Configuration:
-  Open ports 3000 (HTTP) and 3001 (HTTPS)
-  For Google Cloud: Create firewall rule for tcp:3000-3001
+  📌 Open ports 3000 (HTTP) and 3001 (HTTPS)
+  ☁️  Google Cloud: Create firewall rule for tcp:3000-3001
 
 Management Commands:
-  Stop Chromium:   cd /opt/chromium && docker compose down
-  Start Chromium:  cd /opt/chromium && docker compose up -d
-  View Logs:       docker logs -f chromium
-  Full Uninstall:  cd /opt/chromium && docker compose down -v --rmi all
+  ⛔ Stop Chromium:   cd /opt/chromium && docker compose down
+  ▶️  Start Chromium:  cd /opt/chromium && docker compose up -d
+  📜 View Logs:       docker logs -f chromium
+  ❌ Full Uninstall:  cd /opt/chromium && docker compose down -v --rmi all
 
-Note: First launch may take 1-2 minutes while downloading browser data
+🕒 Note: First launch may take 1-2 minutes
+📁 Info saved to: /root/chromium_access.txt
 ==================================================
 EOF
