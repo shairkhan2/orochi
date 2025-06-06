@@ -14,15 +14,20 @@ cat <<EOF
 =====================================
 EOF
 
+# Auto-detect timezone
+detected_tz=$(realpath --relative-to /usr/share/zoneinfo /etc/localtime)
+echo "Detected timezone: $detected_tz"
+
 # User inputs
-read -p "Enter Chromium username: " chromium_user
-read -sp "Enter Chromium password: " chromium_pass && echo
-read -p "Timezone (e.g. Asia/Kolkata): " chromium_tz
-read -p "Homepage URL [default: https://google.com]: " homepage
+read -p "Chromium username: " chromium_user
+read -sp "Chromium password: " chromium_pass && echo
+read -p "Timezone [$detected_tz]: " chromium_tz
+chromium_tz=${chromium_tz:-$detected_tz}
+read -p "Homepage URL [https://google.com]: " homepage
 homepage=${homepage:-https://google.com}
 
 # System optimization
-echo -e "\n\033[1;32m[1/5] Optimizing system for maximum performance...\033[0m"
+echo -e "\n\033[1;32m[1/5] Optimizing system...\033[0m"
 {
   echo "vm.swappiness=10"
   echo "vm.vfs_cache_pressure=50"
@@ -31,8 +36,15 @@ echo -e "\n\033[1;32m[1/5] Optimizing system for maximum performance...\033[0m"
 } >> /etc/sysctl.conf
 sysctl -p
 
+# Fix Docker storage driver
+echo -e "\n\033[1;32m[2/5] Configuring Docker...\033[0m"
+systemctl stop docker
+mkdir -p /etc/docker
+echo '{"storage-driver":"vfs"}' > /etc/docker/daemon.json
+rm -rf /var/lib/docker/*
+systemctl start docker
+
 # Install Docker
-echo -e "\n\033[1;32m[2/5] Installing Docker engine...\033[0m"
 apt update
 apt remove -y docker docker-engine docker.io containerd runc
 apt install -y apt-transport-https ca-certificates curl gnupg
@@ -45,7 +57,7 @@ apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker
 usermod -aG docker $SUDO_USER
 
 # Create Chromium directory
-echo -e "\n\033[1;32m[3/5] Configuring Chromium environment...\033[0m"
+echo -e "\n\033[1;32m[3/5] Configuring Chromium...\033[0m"
 mkdir -p /opt/chromium/{config,data}
 cd /opt/chromium
 
@@ -82,43 +94,45 @@ services:
       - /dev/shm:/dev/shm
       - /tmp/.X11-unix:/tmp/.X11-unix
     ports:
-      - "3010:3000"
-      - "3011:3001"
-    network_mode: host
+      - "3000:3000"   # HTTP access
+      - "3001:3001"   # HTTPS access
     restart: unless-stopped
 EOF
 
+# Set permissions
+chmod 777 -R config/
+
 # Start Chromium
-echo -e "\n\033[1;32m[4/5] Launching Chromium container...\033[0m"
+echo -e "\n\033[1;32m[4/5] Launching Chromium...\033[0m"
 docker compose up -d
 
-# Get IP address
-ip_address=$(hostname -I | awk '{print $1}')
+# Get public IP
+echo -e "\n\033[1;32m[5/5] Getting access information...\033[0m"
+public_ip=$(curl -s https://api.ipify.org || hostname -I | awk '{print $1}')
 
 # Final instructions
-echo -e "\n\033[1;32m[5/5] Installation complete!\033[0m"
 cat <<EOF
 
 ==================================================
  Chromium Remote Browser Access Instructions
 ==================================================
-Access URLS:
-  - http://$ip_address:3010
-  - https://$ip_address:3011
+Access URLs:
+  - http://$public_ip:3000
+  - https://$public_ip:3001 (ignore SSL warning)
 
 Credentials:
   Username: $chromium_user
   Password: $chromium_pass
 
-Firewall Configuration (if blocked):
-  Open ports 3010 (HTTP) and 3011 (HTTPS)
-  For Google Cloud: Create firewall rule for ports 3010-3011
+Firewall Configuration:
+  Open ports 3000 (HTTP) and 3001 (HTTPS)
+  For Google Cloud: Create firewall rule for tcp:3000-3001
 
 Management Commands:
-  Stop Chromium:   docker stop chromium
-  Start Chromium:  docker start chromium
+  Stop Chromium:   cd /opt/chromium && docker compose down
+  Start Chromium:  cd /opt/chromium && docker compose up -d
   View Logs:       docker logs -f chromium
-  Uninstall:       cd /opt/chromium && docker compose down --rmi all
+  Full Uninstall:  cd /opt/chromium && docker compose down -v --rmi all
 
 Note: First launch may take 1-2 minutes while downloading browser data
 ==================================================
