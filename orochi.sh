@@ -1,15 +1,14 @@
 #!/bin/bash
 
-# Check root
+# Must be run as root
 if [ "$EUID" -ne 0 ]; then
   echo "Please run as root"
   exit 1
 fi
 
-echo "============================="
-echo "  Apache Guacamole Installer"
-echo "  Remote Chromium with GUI"
-echo "============================="
+echo "=================================="
+echo " Apache Guacamole + XFCE + Chromium"
+echo "=================================="
 
 apt update
 apt install -y docker.io docker-compose curl gnupg
@@ -17,7 +16,7 @@ apt install -y docker.io docker-compose curl gnupg
 mkdir -p /opt/guac
 cd /opt/guac
 
-# Docker Compose for Guacamole + XFCE + Chromium
+# Write docker-compose.yaml with chromium auto-opening your URL
 cat > docker-compose.yaml <<EOF
 version: "3.8"
 
@@ -71,28 +70,38 @@ services:
     restart: always
     volumes:
       - /dev/shm:/dev/shm
+    command: >
+      /bin/bash -c "chromium-browser --no-sandbox --disable-dev-shm-usage 'https://onprover.orochi.network/?referralCode=8K3d_boisss' && /usr/bin/supervisord -n"
 
 volumes:
   pgdata:
 EOF
 
-# SQL Init for Guacamole DB
+# Prepare Guacamole DB initialization scripts
 mkdir -p init
 curl -sL https://raw.githubusercontent.com/apache/guacamole-client/master/extensions/guacamole-auth-jdbc/modules/guacamole-auth-jdbc-postgresql/schema/001-create-schema.sql -o init/001-create-schema.sql
 curl -sL https://raw.githubusercontent.com/apache/guacamole-client/master/extensions/guacamole-auth-jdbc/modules/guacamole-auth-jdbc-postgresql/schema/002-create-admin-user.sql -o init/002-create-admin-user.sql
 
-# Start containers
+# Start all containers
 docker compose up -d
 
-# Show info
+# Show connection info
 public_ip=$(curl -s https://api.ipify.org || hostname -I | awk '{print $1}')
+
 echo ""
 echo "==========================================="
 echo " Guacamole Remote Desktop with Chromium"
 echo "==========================================="
-echo "URL:       http://$public_ip:8080/guacamole"
-echo "Username:  guacadmin"
-echo "Password:  guacadmin"
+echo "Open in your browser:"
+echo "  http://$public_ip:8080/guacamole"
 echo ""
-echo "VNC (internal): Host: xfce-chromium, Port: 5901"
-echo "Change default password after login!"
+echo "Default login:"
+echo "  Username: guacadmin"
+echo "  Password: guacadmin"
+echo ""
+echo "Internal VNC (for info only):"
+echo "  Host: xfce-chromium"
+echo "  Port: 5901"
+echo ""
+echo "IMPORTANT: Change default password after first login!"
+
