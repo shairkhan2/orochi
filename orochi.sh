@@ -1,107 +1,141 @@
 #!/bin/bash
 
-# Must be run as root
+# Check root
 if [ "$EUID" -ne 0 ]; then
   echo "Please run as root"
   exit 1
 fi
 
-echo "=================================="
-echo " Apache Guacamole + XFCE + Chromium"
-echo "=================================="
-
-apt update
-apt install -y docker.io docker-compose curl gnupg
-
-mkdir -p /opt/guac
-cd /opt/guac
-
-# Write docker-compose.yaml with chromium auto-opening your URL
-cat > docker-compose.yaml <<EOF
-version: "3.8"
-
-services:
-  guacd:
-    image: guacamole/guacd
-    container_name: guacd
-    restart: always
-
-  guacamole:
-    image: guacamole/guacamole
-    container_name: guacamole
-    depends_on:
-      - guacd
-      - postgres
-    environment:
-      GUACD_HOSTNAME: guacd
-      POSTGRES_HOSTNAME: postgres
-      POSTGRES_DATABASE: guacamole_db
-      POSTGRES_USER: guac_user
-      POSTGRES_PASSWORD: guac_pass
-      GUACAMOLE_HOME: /guac-home
-    volumes:
-      - ./guac-home:/guac-home
-    ports:
-      - "8080:8080"
-    restart: always
-
-  postgres:
-    image: postgres:14
-    container_name: guac-db
-    environment:
-      POSTGRES_DB: guacamole_db
-      POSTGRES_USER: guac_user
-      POSTGRES_PASSWORD: guac_pass
-    volumes:
-      - ./init:/docker-entrypoint-initdb.d
-      - pgdata:/var/lib/postgresql/data
-    restart: always
-
-  xfce-chromium:
-    image: dorowu/ubuntu-desktop-lxde-vnc
-    container_name: xfce-chromium
-    environment:
-      - USER=root
-      - VNC_PASSWORD=password
-      - RESOLUTION=1280x800
-    ports:
-      - "5901:5901"
-    shm_size: 2gb
-    restart: always
-    volumes:
-      - /dev/shm:/dev/shm
-    command: >
-      /bin/bash -c "chromium-browser --no-sandbox --disable-dev-shm-usage 'https://onprover.orochi.network/?referralCode=8K3d_boisss' && /usr/bin/supervisord -n"
-
-volumes:
-  pgdata:
+# Welcome message
+cat <<EOF
+=====================================
+ Chromium Remote Browser Installer
+ Optimized for 8-core/32GB servers
+=====================================
 EOF
 
-# Prepare Guacamole DB initialization scripts
-mkdir -p init
-curl -sL https://raw.githubusercontent.com/apache/guacamole-client/master/extensions/guacamole-auth-jdbc/modules/guacamole-auth-jdbc-postgresql/schema/001-create-schema.sql -o init/001-create-schema.sql
-curl -sL https://raw.githubusercontent.com/apache/guacamole-client/master/extensions/guacamole-auth-jdbc/modules/guacamole-auth-jdbc-postgresql/schema/002-create-admin-user.sql -o init/002-create-admin-user.sql
+# Auto-detect timezone
+detected_tz=$(realpath --relative-to /usr/share/zoneinfo /etc/localtime)
+echo "Detected timezone: $detected_tz"
 
-# Start all containers
+# User inputs
+read -p "Chromium username: " chromium_user
+read -sp "Chromium password: " chromium_pass && echo
+read -p "Timezone [$detected_tz]: " chromium_tz
+chromium_tz=${chromium_tz:-$detected_tz}
+read -p "Homepage URL [https://google.com]: " homepage
+homepage=${homepage:-https://google.com}
+
+# System optimization
+echo -e "\n\033[1;32m[1/5] Optimizing system...\033[0m"
+{
+  echo "vm.swappiness=10"
+  echo "vm.vfs_cache_pressure=50"
+  echo "fs.file-max=2097152"
+  echo "net.core.somaxconn=65535"
+} >> /etc/sysctl.conf
+sysctl -p
+
+# Fix Docker storage driver
+echo -e "\n\033[1;32m[2/5] Configuring Docker...\033[0m"
+systemctl stop docker
+mkdir -p /etc/docker
+echo '{"storage-driver":"vfs"}' > /etc/docker/daemon.json
+rm -rf /var/lib/docker/*
+systemctl start docker
+
+# Install Docker
+apt update
+apt remove -y docker docker-engine docker.io containerd runc
+apt install -y apt-transport-https ca-certificates curl gnupg
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+apt update
+apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+usermod -aG docker $SUDO_USER
+
+# Create Chromium directory
+echo -e "\n\033[1;32m[3/5] Configuring Chromium...\033[0m"
+mkdir -p /opt/chromium/{config,data}
+cd /opt/chromium
+
+# Generate docker-compose.yaml
+cat > docker-compose.yaml <<EOF
+version: '3.8'
+services:
+  chromium:
+    image: lscr.io/linuxserver/chromium:latest
+    container_name: chromium
+    privileged: true
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    deploy:
+      resources:
+        limits:
+          cpus: '7.0'
+          memory: 24G
+        reservations:
+          memory: 16G
+    shm_size: "8gb"
+    environment:
+      - CUSTOM_USER=$chromium_user
+      - PASSWORD=$chromium_pass
+      - PUID=1000
+      - PGID=1000
+      - TZ=$chromium_tz
+      - CHROME_CLI=$homepage
+      - DISABLE_GPU=false
+      - CHROMIUM_FLAGS=--no-sandbox --disable-dev-shm-usage --ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy --max-active-webgl-contexts=32 --max-gum-fps=60 --num-raster-threads=8
+    volumes:
+      - ./config:/config
+      - /dev/shm:/dev/shm
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    ports:
+      - "3000:3000"   # HTTP access
+      - "3001:3001"   # HTTPS access
+    restart: unless-stopped
+EOF
+
+# Set permissions
+chmod 777 -R config/
+
+# Start Chromium
+echo -e "\n\033[1;32m[4/5] Launching Chromium...\033[0m"
 docker compose up -d
 
-# Show connection info
+# Get public IP
+echo -e "\n\033[1;32m[5/5] Getting access information...\033[0m"
 public_ip=$(curl -s https://api.ipify.org || hostname -I | awk '{print $1}')
 
-echo ""
-echo "==========================================="
-echo " Guacamole Remote Desktop with Chromium"
-echo "==========================================="
-echo "Open in your browser:"
-echo "  http://$public_ip:8080/guacamole"
-echo ""
-echo "Default login:"
-echo "  Username: guacadmin"
-echo "  Password: guacadmin"
-echo ""
-echo "Internal VNC (for info only):"
-echo "  Host: xfce-chromium"
-echo "  Port: 5901"
-echo ""
-echo "IMPORTANT: Change default password after first login!"
+# Final instructions (stdout + save to file)
+cat <<EOF | tee /root/chromium_access.txt
+
+==================================================
+ ✅ Chromium Remote Browser Access Instructions ✅
+==================================================
+Access URLs:
+  🌐 HTTP:  http://$public_ip:3000
+  🔐 HTTPS: https://$public_ip:3001  (ignore SSL warning)
+
+Credentials:
+  👤 Username: $chromium_user
+  🔒 Password: $chromium_pass
+
+Firewall Configuration:
+  📌 Open ports 3000 (HTTP) and 3001 (HTTPS)
+  ☁️  Google Cloud: Create firewall rule for tcp:3000-3001
+
+Management Commands:
+  ⛔ Stop Chromium:   cd /opt/chromium && docker compose down
+  ▶️  Start Chromium:  cd /opt/chromium && docker compose up -d
+  📜 View Logs:       docker logs -f chromium
+  ❌ Full Uninstall:  cd /opt/chromium && docker compose down -v --rmi all
+
+🕒 Note: First launch may take 1-2 minutes
+📁 Info saved to: /root/chromium_access.txt
+==================================================
+EOF
 
