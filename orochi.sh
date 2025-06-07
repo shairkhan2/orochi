@@ -82,7 +82,7 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=$chromium_tz
-      - CHROME_CLI=--app=$homepage
+      - CHROME_CLI=$homepage
       - DISABLE_GPU=false
       - CHROMIUM_FLAGS=\
 --no-sandbox \
