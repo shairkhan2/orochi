@@ -27,7 +27,7 @@ read -p "Homepage URL [https://google.com]: " homepage
 homepage=${homepage:-https://google.com}
 
 # System optimization
-echo -e "\n\033[1;32m[1/6] Optimizing system...\033[0m"
+echo -e "\n\033[1;32m[1/5] Optimizing system...\033[0m"
 {
   echo "vm.swappiness=10"
   echo "vm.vfs_cache_pressure=50"
@@ -37,18 +37,8 @@ echo -e "\n\033[1;32m[1/6] Optimizing system...\033[0m"
 } >> /etc/sysctl.conf
 sysctl -p
 
-# Enable swap if not present
-if ! swapon --show | grep -q '/swapfile'; then
-  echo -e "\n\033[1;32m[2/6] Creating 16GB Swap...\033[0m"
-  fallocate -l 24G /swapfile
-  chmod 600 /swapfile
-  mkswap /swapfile
-  swapon /swapfile
-  echo '/swapfile none swap sw 0 0' >> /etc/fstab
-fi
-
 # Fix Docker storage driver
-echo -e "\n\033[1;32m[3/6] Configuring Docker...\033[0m"
+echo -e "\n\033[1;32m[2/5] Configuring Docker...\033[0m"
 systemctl stop docker
 mkdir -p /etc/docker
 echo '{"storage-driver":"vfs"}' > /etc/docker/daemon.json
@@ -68,7 +58,7 @@ apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker
 usermod -aG docker $SUDO_USER
 
 # Create Chromium directory
-echo -e "\n\033[1;32m[4/6] Configuring Chromium...\033[0m"
+echo -e "\n\033[1;32m[3/5] Configuring Chromium...\033[0m"
 mkdir -p /opt/chromium/{config,data}
 cd /opt/chromium
 
@@ -79,16 +69,21 @@ services:
   chromium:
     image: lscr.io/linuxserver/chromium:latest
     container_name: chromium
+    privileged: true
     security_opt:
       - seccomp:unconfined
+      - apparmor:unconfined
+    shm_size: "8gb"
+    cpus: "7.0"
+    mem_limit: 28g
     environment:
       - CUSTOM_USER=$chromium_user
       - PASSWORD=$chromium_pass
       - PUID=1000
       - PGID=1000
       - TZ=$chromium_tz
-      - CHROME_CLI=$homepage
-     - DISABLE_GPU=false
+      - CHROME_CLI=--app=$homepage
+      - DISABLE_GPU=false
       - CHROMIUM_FLAGS=\
 --no-sandbox \
 --ignore-gpu-blocklist \
@@ -139,11 +134,11 @@ EOF
 chmod 777 -R config/
 
 # Start Chromium
-echo -e "\n\033[1;32m[5/6] Launching Chromium...\033[0m"
+echo -e "\n\033[1;32m[4/5] Launching Chromium...\033[0m"
 docker compose up -d
 
 # Get public IP
-echo -e "\n\033[1;32m[6/6] Getting access information...\033[0m"
+echo -e "\n\033[1;32m[5/5] Getting access information...\033[0m"
 public_ip=$(curl -s https://api.ipify.org || hostname -I | awk '{print $1}')
 
 # Final instructions
@@ -172,5 +167,8 @@ Management Commands:
 
 🕒 Note: First launch may take 1-2 minutes
 📁 Info saved to: /root/chromium_access.txt
+==================================================
+EOF
+
 ==================================================
 EOF
