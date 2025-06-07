@@ -40,7 +40,7 @@ sysctl -p
 # Enable swap if not present
 if ! swapon --show | grep -q '/swapfile'; then
   echo -e "\n\033[1;32m[2/6] Creating 16GB Swap...\033[0m"
-  fallocate -l 16G /swapfile
+  fallocate -l 24G /swapfile
   chmod 600 /swapfile
   mkswap /swapfile
   swapon /swapfile
@@ -60,9 +60,9 @@ apt update
 apt remove -y docker docker-engine docker.io containerd runc
 apt install -y apt-transport-https ca-certificates curl gnupg
 install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
 apt update
 apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 usermod -aG docker $SUDO_USER
@@ -79,18 +79,8 @@ services:
   chromium:
     image: lscr.io/linuxserver/chromium:latest
     container_name: chromium
-    privileged: true
     security_opt:
       - seccomp:unconfined
-      - apparmor:unconfined
-    deploy:
-      resources:
-        limits:
-          cpus: '7.0'
-          memory: 24G
-        reservations:
-          memory: 16G
-    shm_size: "16gb"
     environment:
       - CUSTOM_USER=$chromium_user
       - PASSWORD=$chromium_pass
@@ -98,8 +88,43 @@ services:
       - PGID=1000
       - TZ=$chromium_tz
       - CHROME_CLI=$homepage
-      - DISABLE_GPU=false
-      - CHROMIUM_FLAGS=--no-sandbox --ignore-gpu-blocklist --force_cpu_raster --num-raster-threads=8 --disable-accelerated-video-decode --disable-background-networking --disable-breakpad --disable-component-update --disable-default-apps --disable-hang-monitor --disable-prompt-on-repost --disable-renderer-backgrounding --disable-sync --disable-background-timer-throttling --disable-client-side-phishing-detection --disable-domain-reliability --disable-features=TranslateUI,BackForwardCache --disable-ipc-flooding-protection --disable-notifications --disable-speech-api --metrics-recording-only --no-default-browser-check --noerrdialogs --no-first-run --autoplay-policy=no-user-gesture-required --password-store=basic --js-flags=--max-old-space-size=24576 --restore-last-session --start-maximized --process-per-site
+     - DISABLE_GPU=false
+      - CHROMIUM_FLAGS=\
+--no-sandbox \
+--ignore-gpu-blocklist \
+--disable-gpu \
+--num-raster-threads=8 \
+--force_cpu_raster \
+--disable-accelerated-video-decode \
+--disable-background-networking \
+--disable-breakpad \
+--disable-component-update \
+--disable-default-apps \
+--disable-dev-shm-usage \
+--disable-hang-monitor \
+--disable-prompt-on-repost \
+--disable-renderer-backgrounding \
+--disable-sync \
+--disable-background-timer-throttling \
+--disable-client-side-phishing-detection \
+--disable-domain-reliability \
+--disable-features=TranslateUI,BackForwardCache \
+--disable-ipc-flooding-protection \
+--disable-notifications \
+--disable-speech-api \
+--metrics-recording-only \
+--no-default-browser-check \
+--noerrdialogs \
+--no-first-run \
+--autoplay-policy=no-user-gesture-required \
+--password-store=basic \
+--js-flags=--max-old-space-size=24576 \
+--restore-last-session \
+--start-maximized \
+--start-fullscreen \
+--disable-session-crashed-bubble \
+--disable-infobars \
+--kiosk
     volumes:
       - ./config:/config
       - /dev/shm:/dev/shm
