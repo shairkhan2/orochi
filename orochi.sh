@@ -33,6 +33,7 @@ echo -e "\n\033[1;32m[1/5] Optimizing system...\033[0m"
   echo "vm.vfs_cache_pressure=50"
   echo "fs.file-max=2097152"
   echo "net.core.somaxconn=65535"
+  echo "vm.overcommit_memory=1"
 } >> /etc/sysctl.conf
 sysctl -p
 
@@ -72,30 +73,60 @@ services:
     security_opt:
       - seccomp:unconfined
       - apparmor:unconfined
-    deploy:
-      resources:
-        limits:
-          cpus: '7.0'
-          memory: 24G
-        reservations:
-          memory: 16G
     shm_size: "8gb"
+    cpus: "7.0"
+    mem_limit: 28g
     environment:
       - CUSTOM_USER=$chromium_user
       - PASSWORD=$chromium_pass
       - PUID=1000
       - PGID=1000
       - TZ=$chromium_tz
-      - CHROME_CLI=$homepage
+      - CHROME_CLI=--app=$homepage
       - DISABLE_GPU=false
-      - CHROMIUM_FLAGS=--no-sandbox --ignore-gpu-blocklist --disable-gpu --num-raster-threads=8 --force_cpu_raster --disable-accelerated-video-decode --disable-background-networking --disable-breakpad --disable-component-update --disable-default-apps --disable-dev-shm-usage --disable-hang-monitor --disable-prompt-on-repost --disable-renderer-backgrounding --disable-sync --disable-background-timer-throttling --disable-client-side-phishing-detection --disable-domain-reliability --disable-features=TranslateUI,BackForwardCache --disable-ipc-flooding-protection --disable-notifications --disable-speech-api --metrics-recording-only --no-default-browser-check --noerrdialogs --no-first-run --autoplay-policy=no-user-gesture-required --password-store=basic --js-flags="--max-old-space-size=24576" --restore-last-session --start-maximized
+      - CHROMIUM_FLAGS=\
+--no-sandbox \
+--ignore-gpu-blocklist \
+--disable-gpu \
+--num-raster-threads=8 \
+--force_cpu_raster \
+--disable-accelerated-video-decode \
+--disable-background-networking \
+--disable-breakpad \
+--disable-component-update \
+--disable-default-apps \
+--disable-dev-shm-usage \
+--disable-hang-monitor \
+--disable-prompt-on-repost \
+--disable-renderer-backgrounding \
+--disable-sync \
+--disable-background-timer-throttling \
+--disable-client-side-phishing-detection \
+--disable-domain-reliability \
+--disable-features=TranslateUI,BackForwardCache \
+--disable-ipc-flooding-protection \
+--disable-notifications \
+--disable-speech-api \
+--metrics-recording-only \
+--no-default-browser-check \
+--noerrdialogs \
+--no-first-run \
+--autoplay-policy=no-user-gesture-required \
+--password-store=basic \
+--js-flags=--max-old-space-size=24576 \
+--restore-last-session \
+--start-maximized \
+--start-fullscreen \
+--disable-session-crashed-bubble \
+--disable-infobars \
+--kiosk
     volumes:
       - ./config:/config
       - /dev/shm:/dev/shm
       - /tmp/.X11-unix:/tmp/.X11-unix
     ports:
-      - "3000:3000"   # HTTP access
-      - "3001:3001"   # HTTPS access
+      - "3000:3000"
+      - "3001:3001"
     restart: unless-stopped
 EOF
 
@@ -110,7 +141,7 @@ docker compose up -d
 echo -e "\n\033[1;32m[5/5] Getting access information...\033[0m"
 public_ip=$(curl -s https://api.ipify.org || hostname -I | awk '{print $1}')
 
-# Final instructions (stdout + save to file)
+# Final instructions
 cat <<EOF | tee /root/chromium_access.txt
 
 ==================================================
@@ -138,5 +169,4 @@ Management Commands:
 📁 Info saved to: /root/chromium_access.txt
 ==================================================
 EOF
-
 
