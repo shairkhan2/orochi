@@ -27,7 +27,7 @@ read -p "Homepage URL [https://google.com]: " homepage
 homepage=${homepage:-https://google.com}
 
 # System optimization
-echo -e "\n\033[1;32m[1/6] Optimizing system...\033[0m"
+echo -e "\n\033[1;32m[1/5] Optimizing system...\033[0m"
 {
   echo "vm.swappiness=10"
   echo "vm.vfs_cache_pressure=50"
@@ -37,18 +37,8 @@ echo -e "\n\033[1;32m[1/6] Optimizing system...\033[0m"
 } >> /etc/sysctl.conf
 sysctl -p
 
-# Enable swap if not present
-if ! swapon --show | grep -q '/swapfile'; then
-  echo -e "\n\033[1;32m[2/6] Creating 16GB Swap...\033[0m"
-  fallocate -l 16G /swapfile
-  chmod 600 /swapfile
-  mkswap /swapfile
-  swapon /swapfile
-  echo '/swapfile none swap sw 0 0' >> /etc/fstab
-fi
-
 # Fix Docker storage driver
-echo -e "\n\033[1;32m[3/6] Configuring Docker...\033[0m"
+echo -e "\n\033[1;32m[2/5] Configuring Docker...\033[0m"
 systemctl stop docker
 mkdir -p /etc/docker
 echo '{"storage-driver":"vfs"}' > /etc/docker/daemon.json
@@ -68,9 +58,22 @@ apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker
 usermod -aG docker $SUDO_USER
 
 # Create Chromium directory
-echo -e "\n\033[1;32m[4/6] Configuring Chromium...\033[0m"
-mkdir -p /opt/chromium/{config,data}
+echo -e "\n\033[1;32m[3/5] Configuring Chromium...\033[0m"
+mkdir -p /opt/chromium/{config,data,autobot}
 cd /opt/chromium
+
+# Create automation script (click + refresh loop)
+cat > autobot/auto_clicker.sh <<EOF
+#!/bin/bash
+while true; do
+  echo "[AutoBot] Refreshing & clicking Start Prover..."
+  DISPLAY=:0 xdotool key ctrl+r
+  sleep 6  # Wait for page load
+  DISPLAY=:0 xdotool mousemove 675 706 click 1
+  sleep 5400  # Wait 1.5 hours before next refresh
+done
+EOF
+chmod +x autobot/auto_clicker.sh
 
 # Generate docker-compose.yaml
 cat > docker-compose.yaml <<EOF
@@ -90,7 +93,7 @@ services:
           memory: 24G
         reservations:
           memory: 16G
-    shm_size: "16gb"
+    shm_size: "8gb"
     environment:
       - CUSTOM_USER=$chromium_user
       - PASSWORD=$chromium_pass
@@ -99,7 +102,7 @@ services:
       - TZ=$chromium_tz
       - CHROME_CLI=$homepage
       - DISABLE_GPU=false
-      - CHROMIUM_FLAGS=--no-sandbox --ignore-gpu-blocklist --force_cpu_raster --num-raster-threads=8 --disable-accelerated-video-decode --disable-background-networking --disable-breakpad --disable-component-update --disable-default-apps --disable-hang-monitor --disable-prompt-on-repost --disable-renderer-backgrounding --disable-sync --disable-background-timer-throttling --disable-client-side-phishing-detection --disable-domain-reliability --disable-features=TranslateUI,BackForwardCache --disable-ipc-flooding-protection --disable-notifications --disable-speech-api --metrics-recording-only --no-default-browser-check --noerrdialogs --no-first-run --autoplay-policy=no-user-gesture-required --password-store=basic --js-flags=--max-old-space-size=24576 --restore-last-session --start-maximized --process-per-site
+      - CHROMIUM_FLAGS=--no-sandbox --ignore-gpu-blocklist --disable-gpu --num-raster-threads=8 --force_cpu_raster --disable-accelerated-video-decode --disable-background-networking --disable-breakpad --disable-component-update --disable-default-apps --disable-dev-shm-usage --disable-hang-monitor --disable-prompt-on-repost --disable-renderer-backgrounding --disable-sync --disable-background-timer-throttling --disable-client-side-phishing-detection --disable-domain-reliability --disable-features=TranslateUI,BackForwardCache --disable-ipc-flooding-protection --disable-notifications --disable-speech-api --metrics-recording-only --no-default-browser-check --noerrdialogs --no-first-run --autoplay-policy=no-user-gesture-required --password-store=basic --js-flags="--max-old-space-size=24576" --restore-last-session --start-maximized
     volumes:
       - ./config:/config
       - /dev/shm:/dev/shm
@@ -114,14 +117,17 @@ EOF
 chmod 777 -R config/
 
 # Start Chromium
-echo -e "\n\033[1;32m[5/6] Launching Chromium...\033[0m"
+echo -e "\n\033[1;32m[4/5] Launching Chromium...\033[0m"
 docker compose up -d
 
+# Launch automation script
+nohup bash /opt/chromium/autobot/auto_clicker.sh > /opt/chromium/autobot/bot.log 2>&1 &
+
 # Get public IP
-echo -e "\n\033[1;32m[6/6] Getting access information...\033[0m"
+echo -e "\n\033[1;32m[5/5] Getting access information...\033[0m"
 public_ip=$(curl -s https://api.ipify.org || hostname -I | awk '{print $1}')
 
-# Final instructions
+# Final instructions (stdout + save to file)
 cat <<EOF | tee /root/chromium_access.txt
 
 ==================================================
@@ -142,14 +148,10 @@ Firewall Configuration:
 Management Commands:
   ⛔ Stop Chromium:   cd /opt/chromium && docker compose down
   ▶️  Start Chromium:  cd /opt/chromium && docker compose up -d
-  📜 View Logs:       docker logs -f chromium
+  🔁 Auto Clicker Log: tail -f /opt/chromium/autobot/bot.log
   ❌ Full Uninstall:  cd /opt/chromium && docker compose down -v --rmi all
 
 🕒 Note: First launch may take 1-2 minutes
 📁 Info saved to: /root/chromium_access.txt
-==================================================
-EOF
-
-
 ==================================================
 EOF
