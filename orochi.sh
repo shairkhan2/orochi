@@ -62,15 +62,16 @@ echo -e "\n\033[1;32m[3/5] Configuring Chromium...\033[0m"
 mkdir -p /opt/chromium/{config,data,autobot}
 cd /opt/chromium
 
-# Create automation script (click + refresh loop)
+# Create automation script (click + refresh loop) with correct DISPLAY
 cat > autobot/auto_clicker.sh <<EOF
 #!/bin/bash
+export DISPLAY=:1
 while true; do
   echo "[AutoBot] Refreshing & clicking Start Prover..."
-  DISPLAY=:0 xdotool key ctrl+r
+  xdotool key ctrl+r
   sleep 6  # Wait for page load
-  DISPLAY=:0 xdotool mousemove 675 706 click 1
-  sleep 5400  # Wait 1.5 hours before next refresh
+  xdotool mousemove 675 706 click 1
+  sleep 3600  # Wait 1 hours before next refresh
 done
 EOF
 chmod +x autobot/auto_clicker.sh
